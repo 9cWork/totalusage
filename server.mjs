@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Zero-dependency MCP stdio server: runs `ccusage` and returns the Total row by column.
+// Zero-dependency MCP stdio server: runs `ccusage` and totals Claude-model usage by category.
 import { execSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
@@ -19,36 +19,37 @@ function ensureCcusage() {
   }
 }
 
-const cells = (line) =>
-  line.replace(/\x1b\[[0-9;]*m/g, "").split("│").slice(1).map((c) => c.trim());
+const fmt = (n) => n.toLocaleString("en-US");
 
+// Sums only Claude models (name starts with "claude-"), skipping other providers.
 function totalUsage() {
   ensureCcusage();
-  const lines = run("ccusage").split(/\r?\n/);
-
-  // Header = content rows between the top border (┌) and the first separator (├).
-  const top = lines.findIndex((l) => l.includes("┌"));
-  const sep = lines.findIndex((l, i) => i > top && l.includes("├"));
-  const headerRows = lines.slice(top + 1, sep).map(cells);
-  const headers = headerRows[0].map((_, i) =>
-    headerRows.map((r) => r[i] || "").join(" ").replace(/\s+/g, " ").trim()
-  );
-
-  const totalLine = lines.find((l) => /^│\s*Total\s*│/.test(l.trim()));
-  if (!totalLine) throw new Error("No Total row found in ccusage output");
-  const values = cells(totalLine);
-
-  const result = {};
-  headers.forEach((h, i) => {
-    if (i > 0 && values[i]) result[h] = values[i];
-  });
-  return result;
+  const data = JSON.parse(run("ccusage --json --breakdown"));
+  const t = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, cost: 0 };
+  for (const day of data.daily ?? []) {
+    for (const m of day.modelBreakdowns ?? []) {
+      if (!/^claude-/i.test(m.modelName)) continue;
+      t.input += m.inputTokens;
+      t.output += m.outputTokens;
+      t.cacheCreate += m.cacheCreationTokens;
+      t.cacheRead += m.cacheReadTokens;
+      t.cost += m.cost;
+    }
+  }
+  return {
+    Input: fmt(t.input),
+    Output: fmt(t.output),
+    "Cache Create": fmt(t.cacheCreate),
+    "Cache Read": fmt(t.cacheRead),
+    "Total Tokens": fmt(t.input + t.output + t.cacheCreate + t.cacheRead),
+    "Cost (USD)": "$" + t.cost.toFixed(2),
+  };
 }
 
 // ---- MCP plumbing ----
 const TOOL = {
   name: "total_usage",
-  description: "Run ccusage and return the Total row (Input, Output, Cache Create, Cache Read, Total Tokens, Cost).",
+  description: "Run ccusage and return Claude-only totals (Input, Output, Cache Create, Cache Read, Total Tokens, Cost).",
   inputSchema: { type: "object", properties: {} },
 };
 const PROMPT = { name: "totalusage", description: "Show total ccusage totals by category" };
