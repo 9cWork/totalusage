@@ -1,0 +1,6 @@
+{
+  "name": "totalusage",
+  "description": "/totalusage - show total ccusage token usage and cost by category",
+  "version": "1.0.0",
+  "author": { "name": "9cWork" }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "totalusage",
+  "owner": { "name": "9cWork" },
+  "plugins": [
+    { "name": "totalusage", "source": "./", "description": "/totalusage - show total ccusage token usage and cost by category" }
+  ]
+}
